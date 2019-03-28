@@ -1,0 +1,231 @@
+using System;
+using System.Globalization;
+using System.Linq;
+using System.Web;
+using GolfBox.Framework.OnlinePayment;
+using GolfBox.Framework.OnlinePayment.Enums;
+using GolfBox.OnlinePayment;
+
+namespace Handlers
+{
+    public class PlaceOrder : IHttpHandler
+    {
+        public bool IsReusable
+        {
+            get { return true; }
+        }
+
+        public void ProcessRequest(HttpContext context)
+        {
+            HttpRequest req  = context.Request;
+            HttpResponse res = context.Response;
+
+            Log<string> log = new Log<string>();
+            string basePath = req.Url.Scheme + "://" + req.Url.Host + (req.Url.IsDefaultPort ? string.Empty : ":" + req.Url.Port);
+
+            #region Load Merchant ID
+            int merchantId = Helper.IntTryParse(req["merchantId"], -1);
+
+            Payment payment = Payment.Create(merchantId);
+
+            if (payment.MerchantAgreement == null)
+            {
+                string message = "Error: Unknown merchantId ( " + merchantId + " )";
+                log.Action = "Payment.PlaceOrder";
+                log.SaveResponse(message);
+
+                Helper.WriteTxt(res, message);
+                return;
+            }
+            #endregion
+
+            #region Set Basics
+            payment.InstantCapture = (req["payment.InstantCapture"] == "1");
+            payment.SourceSystem   = (SourceSystem)Enum.Parse(typeof(SourceSystem), req["payment.SourceSystem"], true);
+            payment.Currency       = (GolfBox.Framework.Enums.Currency)Enum.Parse(typeof(GolfBox.Framework.Enums.Currency), req["payment.Currency"], true);
+            payment.SetState(State.PlaceOrder, false); // We specify false as we don't want to save this State as a separate action for now. If we ever need to be able to control this step more thoroughly, we can make sure to save the state immediately
+
+            payment.SetOrderBasic(
+                req["payment.Id"],
+                req["payment.Name"],
+                req["payment.Description"],
+                (req["payment.ExtraDescription"] ?? string.Empty).Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None)
+            );
+            #endregion
+
+            #region Set URLs
+            payment.SetOrderUrls(
+                req["payment.ReturnUrl"],
+                req["payment.CancelUrl"],
+                req["payment.CallbackUrl"],
+                req["payment.ErrorUrl"],
+                basePath + "/Payment/AcceptOrderCallback.ashx",
+                basePath + "/Payment/CancelOrderCallback.ashx",
+                Settings.UseLocalIP ?
+                    (req.Url.Scheme + "://" + Settings.LocalIPAddress() + (!string.IsNullOrWhiteSpace(Settings.LocalPortNumber) ? ":" + Settings.LocalPortNumber : "") + "/Payment/ProviderCallback.ashx") :
+                    (basePath + "/Payment/ProviderCallback.ashx")
+            );
+            #endregion
+
+            #region Set Products
+            int productsCount = Helper.IntTryParse(req["payment.Products.Count"]);
+
+            for (int i = 0; i < productsCount; i++)
+            {
+                payment.AddProduct(new Product()
+                {
+                    ID          = req["payment.Products." + i + ".ID"],
+                    Name        = System.Net.WebUtility.HtmlDecode(Uri.UnescapeDataString(req["payment.Products." + i + ".Name"])),
+                    Description = req["payment.Products." + i + ".Description"],
+                    Quantity    = int.Parse(req["payment.Products." + i + ".Quantity"]),
+                    Price       = decimal.Parse(req["payment.Products." + i + ".Price"], CultureInfo.InvariantCulture),
+                    VatPrice    = decimal.Parse(req["payment.Products." + i + ".VatPrice"], CultureInfo.InvariantCulture),
+                    VatPercent  = decimal.Parse(req["payment.Products." + i + ".VatPercent"], CultureInfo.InvariantCulture)
+                });
+            }
+            #endregion
+
+            #region Set Affiliate Info
+            payment.SetAffiliate(new Affiliate()
+            {
+                ID                 = req["payment.Affiliate.ID"],
+                ReferenceID        = req["payment.Affiliate.ReferenceID"],
+                FirstName          = req["payment.Affiliate.FirstName"],
+                LastName           = req["payment.Affiliate.LastName"],
+                MiddleName         = req["payment.Affiliate.MiddleName"],
+                Company            = req["payment.Affiliate.Company"],
+                VATNumber          = req["payment.Affiliate.VATNumber"],
+                Address1           = req["payment.Affiliate.Address1"],
+                Address2           = req["payment.Affiliate.Address2"],
+                Address3           = req["payment.Affiliate.Address3"],
+                CO                 = req["payment.Affiliate.CO"],
+                Box                = req["payment.Affiliate.Box"],
+                PostNumber         = req["payment.Affiliate.PostNumber"],
+                City               = req["payment.Affiliate.City"],
+                State              = req["payment.Affiliate.State"],
+                Country            = req["payment.Affiliate.Country"],
+                Phone              = req["payment.Affiliate.Phone"],
+                Email              = req["payment.Affiliate.Email"],
+                Fax                = req["payment.Affiliate.Fax"],
+                Website            = req["payment.Affiliate.Website"],
+                PaymentInformation = req["payment.Affiliate.PaymentInformation"]
+            });
+            #endregion
+
+            #region Set Billing Info
+            payment.SetBilling(new Address()
+            {
+                ID          = req["payment.Billing.ID"],
+                ReferenceID = req["payment.Billing.ReferenceID"],
+                FirstName   = req["payment.Billing.FirstName"],
+                LastName    = req["payment.Billing.LastName"],
+                Company     = req["payment.Billing.Company"],
+                Address1    = req["payment.Billing.Address1"],
+                Address2    = req["payment.Billing.Address2"],
+                Address3    = req["payment.Billing.Address3"],
+                PostNumber  = req["payment.Billing.PostNumber"],
+                City        = req["payment.Billing.City"],
+                State       = req["payment.Billing.State"],
+                Country     = req["payment.Billing.Country"],
+                CountryCode = req["payment.Billing.CountryCode"],
+                Email       = req["payment.Billing.Email"],
+                Phone       = req["payment.Billing.Phone"],
+                Fax         = req["payment.Billing.Fax"]
+            });
+            #endregion
+
+            #region Set Shipping Info
+            payment.SetShipping(new Address()
+            {
+                ID          = req["payment.Shipping.ID"],
+                ReferenceID = req["payment.Shipping.ReferenceID"],
+                FirstName   = req["payment.Shipping.FirstName"],
+                LastName    = req["payment.Shipping.LastName"],
+                Company     = req["payment.Shipping.Company"],
+                Address1    = req["payment.Shipping.Address1"],
+                Address2    = req["payment.Shipping.Address2"],
+                Address3    = req["payment.Shipping.Address3"],
+                PostNumber  = req["payment.Shipping.PostNumber"],
+                City        = req["payment.Shipping.City"],
+                State       = req["payment.Shipping.State"],
+                Country     = req["payment.Shipping.Country"],
+                CountryCode = req["payment.Shipping.CountryCode"],
+                Email       = req["payment.Shipping.Email"],
+                Phone       = req["payment.Shipping.Phone"],
+                Fax         = req["payment.Shipping.Fax"]
+            });
+            #endregion
+
+            #region Set Custom Properties
+            var agreementRef          = req["payment.agreementRef"];
+            var memberUsername        = req["payment.member.username"];
+            var memberName            = req["payment.member.name"];
+            var creditCardType        = req["payment.creditCard.type"];
+            var creditCardNumber      = req["payment.creditCard.number"];
+            var creditCardExpireYear  = req["payment.creditCard.expireYear"];
+            var creditCardExpireMonth = req["payment.creditCard.expireMonth"];
+
+            if (!string.IsNullOrWhiteSpace(agreementRef))
+                payment.SetOrderProperty("agreementRef", agreementRef);
+            if (!string.IsNullOrWhiteSpace(memberUsername))
+                payment.SetOrderProperty("member:username", memberUsername);
+            if (!string.IsNullOrWhiteSpace(memberName))
+                payment.SetOrderProperty("member:name", memberName);
+            if (!string.IsNullOrWhiteSpace(creditCardType))
+                payment.SetOrderProperty("creditCard:Type", creditCardType);
+            if (!string.IsNullOrWhiteSpace(creditCardNumber))
+                payment.SetOrderProperty("creditCard:Number", creditCardNumber);
+            if (!string.IsNullOrWhiteSpace(creditCardExpireYear))
+                payment.SetOrderProperty("creditCard:ExpireYear", creditCardExpireYear);
+            if (!string.IsNullOrWhiteSpace(creditCardExpireMonth))
+                payment.SetOrderProperty("creditCard:ExpireMonth", creditCardExpireMonth);
+
+            foreach (var key in req.Params.AllKeys.Where(o => o.StartsWith("payment.custom.")))
+            {
+                var oKey = key.Substring(15);
+                var oVal = req[key];
+
+                if (!string.IsNullOrWhiteSpace(oKey) && !string.IsNullOrWhiteSpace(oVal))
+                    payment.SetOrderProperty("custom:" + oKey, oVal);
+            }
+            #endregion
+
+            if (payment.MerchantAgreement != null && payment.MerchantAgreement.Provider == Provider.Paytrail) // KJ 2018-04-18 - We need to replace doublequotes with singlequotes, as Paytrail is not working if any parameters we send include a double quote
+            {
+                if (payment.Order != null && payment.Order.Description != null)
+                    payment.Order.Description = ReplaceIllegalPaytrailCharacters(payment.Order.Description);
+
+                if (payment.Products != null)
+                {
+                    foreach (var product in payment.Products)
+                    {
+                        product.Name = ReplaceIllegalPaytrailCharacters(product.Name);
+                    }
+                }
+            }
+
+            try
+            {
+                payment.Save();
+                log.PaymentID = payment.ID;
+                log.Action    = "Payment.PlaceOrder";
+                log.SaveResponse(string.Format("Payment: {0}", payment.ToJsonData()));
+            }
+            catch (Exception ex)
+            {
+                log.PaymentID = 0;
+                log.Action    = "Payment.PlaceOrder";
+                log.SaveResponse(string.Format("Exception: {0}, StackTrace: {1}", ex.Message, ex.StackTrace));
+                Helper.WriteTxt(res, "Error: " + ex.Message);
+                return;
+            }
+
+            Helper.WriteTxt(res, Helper.EditUrlQueryString(basePath, "v", Encryption.XorEncrypt("paymentId=" + payment.ID), "culture", req["payment.Culture"]));
+        }
+
+        private static string ReplaceIllegalPaytrailCharacters(string input)
+        {
+            return input.Replace('"', '\''); // Paytrail does not seem to allow double quotes
+        }
+    }
+}

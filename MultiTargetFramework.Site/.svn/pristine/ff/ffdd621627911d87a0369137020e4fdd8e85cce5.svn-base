@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<configuration>
+  <appSettings configSource="Configs\AppSettings.config"/>
+  <connectionStrings configSource="Configs\ConnectionStrings.config"/>
+  <!--
+    For a description of web.config changes see http://go.microsoft.com/fwlink/?LinkId=235367.
+
+    The following attributes can be set on the <httpRuntime> tag.
+      <system.Web>
+        <httpRuntime targetFramework="4.7.1" />
+      </system.Web>
+  -->
+  <system.web>
+    <customErrors mode="Off"/>
+    <compilation debug="true" targetFramework="4.7.1"/>
+    <machineKey decryption="AES" decryptionKey="8BE0A9CFB45FBD47E0DEB46B39EC6339F79866811C751210" validation="SHA1" validationKey="DD847D3BB5FA42EA79DB0AD90E532465D02789CCFB8F050CA858997AB32297D0B2F3B4C2B05209BC046215470624E0BB0465CE1E0C065B1CD0130B8126C20708"/>
+    <globalization enableClientBasedCulture="true"/>
+    <pages controlRenderingCompatibilityVersion="4.0"/>
+  </system.web>
+</configuration>

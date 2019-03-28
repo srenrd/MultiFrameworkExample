@@ -1,0 +1,28 @@
+<%@ Master Language="C#" AutoEventWireup="true" CodeFile="Site.master.cs" Inherits="SiteMaster" %>
+<!DOCTYPE html>
+<html>
+<head runat="server">
+	<meta charset="<%="utf-8"%>" />
+	<meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+	<title></title>
+
+	<link rel="stylesheet" href="<%=ResolveUrl("~/Styles/normalize.css")%>" />
+	<link rel="stylesheet" href="<%=ResolveUrl("~/Styles/jquery-ui-themes-" + Settings.JQueryUI + "/base/jquery-ui.css")%>" />
+
+	<script src="<%=ResolveUrl("~/Scripts/json2.js?" + Settings.FileVersion)%>"></script>
+	<script src="<%=ResolveUrl("~/Scripts/jquery-" + Settings.JQuery + "/jquery.min.js")%>"></script>
+	<script src="<%=ResolveUrl("~/Scripts/jquery.jsoncookie.js?" + Settings.FileVersion)%>"></script>
+	<script src="<%=ResolveUrl("~/Scripts/jquery-ui-" + Settings.JQueryUI + "/jquery-ui.min.js")%>"></script>
+
+	<asp:ContentPlaceHolder ID="head" runat="server">
+	</asp:ContentPlaceHolder>
+</head>
+<body>
+	<form id="aspnetForm" runat="server">
+		<div>
+			<asp:ContentPlaceHolder ID="main" runat="server">
+			</asp:ContentPlaceHolder>
+		</div>
+	</form>
+</body>
+</html>

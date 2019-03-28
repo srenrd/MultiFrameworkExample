@@ -1,0 +1,85 @@
+using System;
+using System.Configuration;
+using System.Web;
+
+public static class Settings
+{
+	public static bool IsTest
+	{
+		get { return ConfigurationManager.AppSettings["IsTest"] == "1"; }
+	}
+
+    public static bool UseLocalIP
+    {
+        get 
+        { 
+            if (!string.IsNullOrEmpty(ConfigurationManager.AppSettings["UseLocalIP"]))
+                return ConfigurationManager.AppSettings["UseLocalIP"] == "1";
+            return false;
+        }
+    }
+
+    public static string LocalPortNumber
+    {
+        get {
+            return !string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["PortNumber"]) ? ConfigurationManager.AppSettings["PortNumber"] : "";
+        }
+    }
+
+    public static string LocalIPAddress()
+    {
+        System.Net.IPHostEntry host;
+        string localIP = "";
+        host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+        foreach (System.Net.IPAddress ip in host.AddressList)
+        {
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                if (!ip.ToString().StartsWith("10."))
+                {
+                    localIP = ip.ToString();
+                    break;
+                }
+            }
+        }
+        return localIP;
+    }
+
+	public static string Version
+	{
+		get { return ConfigurationManager.AppSettings["Version"]; }
+	}
+
+	public static string FileVersion
+	{
+		get { return ConfigurationManager.AppSettings["FileVersion"]; }
+	}
+
+	public static string JQuery
+	{
+		get { return ConfigurationManager.AppSettings["jQuery"]; }
+	}
+
+	public static string JQueryUI
+	{
+		get { return ConfigurationManager.AppSettings["jQuery.UI"]; }
+	}
+
+	public static string ServerName
+	{
+		get { return HttpContext.Current.Request.ServerVariables["SERVER_NAME"]; }
+	}
+
+	public static class Encryption
+	{
+		public static int[] DefaultXorKeys
+		{
+			get { return Array.ConvertAll<string, int>(ConfigurationManager.AppSettings["Encryption.DefaultXorKeys"].Split(' '), o => int.Parse(o)); }
+		}
+
+		public static bool UseBase64
+		{
+			get { return ConfigurationManager.AppSettings["Encryption.UseBase64"] == "1"; }
+		}
+	}
+}

@@ -1,0 +1,86 @@
+﻿using System;
+using System.Web;
+using GolfBox.OnlinePayment;
+using GolfBox.Framework.OnlinePayment;
+
+namespace Handlers
+{
+    public class ProviderCallback : IHttpHandler
+    {
+        public void ProcessRequest(HttpContext context)
+        {
+            HttpRequest request = context.Request;
+
+            string paymentIdReq = request["paymentId"] ?? request.Form["s_paymentId"] ?? "-1";
+            int paymentId = Helper.IntTryParse(paymentIdReq, -1);
+
+            Log<string> log = new Log<string>();
+            log.PaymentID = paymentId;
+            log.SaveRequest("Payment.ProviderCallback", request.Form);
+
+            GolfBox.Framework.OnlinePayment.Payment payment = GolfBox.Framework.OnlinePayment.Payment.Load(paymentId);
+
+            if (payment == null)
+            {
+                log.SaveResponse(string.Format("Error: Payment does not exist ({0})", paymentId));
+                return;
+            }
+
+            PaymentWrapper.SetPaymentState(payment, GolfBox.Framework.OnlinePayment.Enums.State.ProviderCallback, "ProviderCallback"); // We're not checking on this state for now, as there is already an extensive handling in place to make sure AcceptOrderCallback and ProviderCallback don't attempt to perform the same steps simultaneously. If we ever want to check on this state, remember that AcceptOrderCallback can theoretically happen simultaneously
+
+            try
+            {
+                ClientCallback(payment, request, "callback");
+                log.SaveResponse("Payment status: " + payment.Status);
+            }
+            catch (Exception ex)
+            {
+                log.SaveResponse(string.Format("Exception: {0}, StackTrace: {1}", ex.Message, ex.StackTrace));
+                return;
+            }
+        }
+
+        public static void ClientCallback(Payment payment, HttpRequest request, string reference)
+        {
+            if (payment.Status == GolfBox.Framework.OnlinePayment.Enums.Status.Initialized)
+            {
+                if (payment.MerchantAgreement.Provider == GolfBox.Framework.OnlinePayment.Enums.Provider.DIBSFlexWin)
+                {
+                    //request.Form.Add("s_encoding", "ISO-8859-1");
+                }
+
+                PaymentWrapper.UpdatePaymentStatus(payment, request);
+            }
+
+            if (payment.Status == GolfBox.Framework.OnlinePayment.Enums.Status.Authorized || (payment.MerchantAgreement.Provider == GolfBox.Framework.OnlinePayment.Enums.Provider.Paytrail && payment.Status == GolfBox.Framework.OnlinePayment.Enums.Status.Captured))
+            {
+                if (payment.ClientStatus != payment.Status)
+                {
+                    Log<string> log = new Log<string>();
+                    log.PaymentID = payment.ID;
+                    log.SaveRequest("Payment.ProviderCallback.ClientCallback.SendStatusToClient", "Payment", payment.ToJsonData());
+
+                    PaymentWrapper.GetClientResponse(payment, reference);
+
+                    log.SaveResponse("Payment status: " + payment.Status);
+                }
+
+                if (payment.InstantCapture)
+                {
+                    Log<string> log = new Log<string>();
+                    log.PaymentID = payment.ID;
+                    log.SaveRequest("Payment.ProviderCallback.ClientCallback.CapturePayment", "Payment", payment.ToJsonData());
+
+                    PaymentWrapper.CapturePayment(payment);
+
+                    log.SaveResponse("Payment status: " + payment.Status);
+                }
+            }
+        }
+
+        public bool IsReusable
+        {
+            get { return true; }
+        }
+    }
+}

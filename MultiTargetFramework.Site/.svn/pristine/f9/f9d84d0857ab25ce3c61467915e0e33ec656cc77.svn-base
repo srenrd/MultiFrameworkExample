@@ -1,0 +1,56 @@
+﻿using System;
+using System.Web;
+using GolfBox.OnlinePayment;
+using GolfBox.Framework.OnlinePayment;
+
+namespace Handlers
+{
+    public class AjaxHandler : IHttpHandler
+    {
+        public void ProcessRequest(HttpContext context)
+        {
+            HttpRequest request = context.Request;
+            HttpResponse response = context.Response;
+
+            object output = null;
+            switch (request["methodName"])
+            {
+                case "GetPayment":
+                    output = Method_GetPayment(request, response);
+                    break;
+            }
+
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(output);
+            response.Clear();
+            response.ContentType = "application/json";
+            response.Write(json);
+            response.End();
+        }
+
+        public bool IsReusable
+        {
+            get { return true; }
+        }
+
+        private object Method_GetPayment(HttpRequest req, HttpResponse res)
+        {
+            int paymentId = Helper.IntTryParse(req["paymentId"]);
+            GolfBox.Framework.OnlinePayment.Payment payment = null;
+
+            if (paymentId > 0)
+            {
+                Log<string> log = new Log<string>();
+                payment = GolfBox.Framework.OnlinePayment.Payment.Load(paymentId);
+
+                if (payment != null)
+                {
+                    log.PaymentID = paymentId;
+                    log.Action = "AjaxHandler.GetPayment";
+                    log.SaveResponse("Payment State: " + payment.State);
+                }
+            }
+
+            return payment;
+        }
+    }
+}

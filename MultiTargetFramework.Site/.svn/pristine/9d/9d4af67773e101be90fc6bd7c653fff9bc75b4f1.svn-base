@@ -1,0 +1,107 @@
+<%@ Page Title="Please Wait" Language="C#" MasterPageFile="~/RestrictedArea/Restricted.master" AutoEventWireup="true" CodeFile="Await.aspx.cs" Inherits="RestrictedArea_Await" %>
+
+<asp:Content ID="Content1" ContentPlaceHolderID="head" runat="Server">
+	<style type="text/css">
+        .please-wait-wrapper {
+            width: 300px;
+            margin: 20px auto;
+        }
+
+        .please-wait-wrapper .please-wait-spinner {
+            background: url(/Styles/Images/spinner-large.gif);
+            float: left;
+            height: 60px;
+            width: 60px;
+            background-repeat-x: no-repeat;
+            margin-right: 20px;
+        }
+
+        .please-wait-wrapper .please-wait-spinner-holder {
+            float: left;
+        }
+
+        .please-wait-wrapper .please-wait-text {
+            font-weight: bold;
+            font-size: 24px;
+            line-height: 60px; /* Should make the text align with the spinner */
+        }
+	</style>
+</asp:Content>
+<asp:Content ID="Content2" ContentPlaceHolderID="main" runat="Server">
+    <div class="please-wait-wrapper">
+        <div class="please-wait-spinner"></div>
+        <div class="please-wait-text-holder">
+            <div class="please-wait-text">Processing</div>
+        </div>
+    </div>
+    <script>
+        $(function () {
+            var updateTime = 2000; // 2 seconds
+            var timeout = 30000; // 30 seconds
+            var start = new Date();
+            var completeURL = null;
+            var errorURL = null;
+
+            function startUpdatePoll() {
+                var elapsed = new Date() - start; // The time elapsed since the start variable was instantiated
+
+                if (elapsed < timeout) {
+                    setTimeout(function () {
+                        getPayment(function (data) {
+                            if (data) {
+                                if (data.Order) { // Make sure we store the necessary data
+                                    if (!completeURL)
+                                        completeURL = data.Order.ClientReturnUrl;
+
+                                    if (!errorURL)
+                                        errorURL = data.Order.ClientErrorUrl;
+                                }
+
+                                if (data.State == '<%=(int)GolfBox.Framework.OnlinePayment.Enums.State.ReturnToClient%>') {
+                                    location.href = completeURL;
+                                }
+                                else if (data.Status == '<%=(int)GolfBox.Framework.OnlinePayment.Enums.Status.Error%>' || data.ClientStatus == '<%=(int)GolfBox.Framework.OnlinePayment.Enums.Status.Error%>') {
+                                    var errorMessage = data.Order && data.Order._Dict ? data.Order._Dict.errorDescription : ''
+                                    showError(errorMessage);
+                                }
+                                else {
+                                    startUpdatePoll(); // The payment is still in progress, execute self
+                                }
+                            }
+                            else
+                                showError('The payment could not be found');
+                        });
+                    }, updateTime);
+                }
+                else {
+                    showError('The payment attempt timed out');
+                }
+            }
+
+            function getPayment(callback) {
+                $.ajax({
+                    url: '/Payment/AjaxHandler.ashx?methodName=GetPayment&paymentId=<%=PaymentId%>',
+                    success: function (data) {
+                        $.isFunction(callback) && callback(data);
+                    },
+                    error: function () {
+                        showError();
+                    }
+                });
+            }
+
+            function showError(errorMessage) {
+                if (!errorMessage)
+                    errorMessage = 'An unknown error occurred';
+
+                if (errorURL)
+                    location.href = errorURL + '&msg=' + encodeURIComponent(errorMessage)
+                else
+                    $('.please-wait-wrapper').html(errorMessage);
+            }
+
+            startUpdatePoll();
+        });
+    </script>
+</asp:Content>
+

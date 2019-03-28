@@ -1,0 +1,14 @@
+using System;
+using System.Collections.Generic;
+
+using GolfBox.OnlinePayment;
+
+public partial class RestrictedArea_Await : System.Web.UI.Page
+{
+    protected int PaymentId { get; set; }
+
+    protected void Page_Load(object sender, EventArgs e)
+	{
+        PaymentId = Helper.IntTryParse(Request["paymentId"]);
+	}
+}

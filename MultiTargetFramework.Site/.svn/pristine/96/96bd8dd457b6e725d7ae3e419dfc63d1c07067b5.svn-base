@@ -1,0 +1,46 @@
+﻿using System.Web;
+using GolfBox.OnlinePayment;
+using GolfBox.Framework.OnlinePayment;
+
+namespace Handlers
+{
+    public class CancelOrderCallback : IHttpHandler
+    {
+        public void ProcessRequest(HttpContext context)
+        {
+            HttpRequest request = context.Request;
+            HttpResponse response = context.Response;
+
+            string paymentIdReq = request["paymentId"] ?? request.Form["s_paymentId"] ?? "-1";
+            int paymentId = Helper.IntTryParse(paymentIdReq, -1);
+
+            Log<string> log = new Log<string>();
+            log.PaymentID = paymentId;
+            log.SaveRequest("Payment.CancelOrderCallback", request.Form);
+
+            GolfBox.Framework.OnlinePayment.Payment payment = GolfBox.Framework.OnlinePayment.Payment.Load(paymentId);
+
+            if (payment == null)
+            {
+                string message = string.Format("Error: Payment does not exist ({0})", paymentId);
+                log.SaveResponse(message);
+
+                Helper.WriteTxt(response, message);
+                return;
+            }
+
+            payment.SetCancelState();
+            payment.Save();
+
+            log.SaveResponse(string.Format("Payment status: {0}", payment.Status.ToString()));
+
+            Helper.RedirectHtml(context, Helper.EditUrlQueryString(payment.Order.ClientCancelUrl, "paymentId", payment.ID.ToString()), "Please wait...");
+            return;
+        }
+
+        public bool IsReusable
+        {
+            get { return true; }
+        }
+    }
+}

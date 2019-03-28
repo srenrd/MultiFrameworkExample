@@ -1,0 +1,31 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+using GolfBox.Framework.OnlinePayment;
+using GolfBox.Framework.Core;
+
+public partial class Api_OnlinePayment_FetchMerchantAgreements : System.Web.UI.Page
+{
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        List<MerchantAgreement> result = new List<MerchantAgreement>();
+        string data = System.Text.Encoding.UTF8.GetString(Request.BinaryRead(Request.ContentLength));
+        try
+        {
+            List<int> merchantAgreementIDList = Newtonsoft.Json.JsonConvert.DeserializeObject<List<int>>(data);
+
+            result = MerchantAgreement.List(merchantAgreementIDList).ToListOrEmpty();
+        }
+        catch (Exception ex)
+        {
+            
+        }
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(result);
+        Response.Clear();
+        Response.Write(json);
+        Response.End();
+    }
+}

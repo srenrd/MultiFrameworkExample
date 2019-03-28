@@ -1,0 +1,1 @@
+﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="OnlinePayment.FetchMerchantAgreements.aspx.cs" Inherits="Api_OnlinePayment_FetchMerchantAgreements" %>

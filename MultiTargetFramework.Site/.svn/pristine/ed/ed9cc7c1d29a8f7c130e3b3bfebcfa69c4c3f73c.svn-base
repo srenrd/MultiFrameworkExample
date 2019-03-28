@@ -1,0 +1,106 @@
+﻿using System;
+using System.Web;
+using GolfBox.OnlinePayment;
+using GolfBox.Framework.OnlinePayment;
+
+namespace Handlers
+{
+    public class AcceptOrderCallback : IHttpHandler
+    {
+        public void ProcessRequest(HttpContext context)
+        {
+            HttpRequest request = context.Request;
+            HttpResponse response = context.Response;
+
+            string paymentIdReq = request["paymentId"] ?? request.Form["s_paymentId"] ?? "-1";
+            int paymentId = Helper.IntTryParse(paymentIdReq, -1);
+
+            Log<string> log = new Log<string>();
+            log.PaymentID = paymentId;
+            log.SaveRequest("Payment.AcceptOrderCallback", request.Form);
+
+            #region Load Payment
+            GolfBox.Framework.OnlinePayment.Payment payment = GolfBox.Framework.OnlinePayment.Payment.Load(paymentId);
+            
+            if (payment == null)
+            {
+                string message = string.Format("Error: Payment does not exist ({0})", paymentId);
+                log.SaveResponse(message);
+
+                Helper.WriteTxt(response, message);
+                return;
+            }
+            #endregion
+
+            log.SaveResponse("Payment status: " + payment.Status);
+
+            if (payment.State >= GolfBox.Framework.OnlinePayment.Enums.State.AcceptOrderCallback)
+            {
+                // This step has already been initated. Redirect to the Await page
+                Helper.RedirectToAwait(context, payment);
+                return;
+            }
+
+            PaymentWrapper.SetPaymentState(payment, GolfBox.Framework.OnlinePayment.Enums.State.AcceptOrderCallback, "AcceptOrderCallback");
+
+            #region Get latest payment status from Provider
+            // -------------------------------------------------------------------------------------
+            if (payment.Status == GolfBox.Framework.OnlinePayment.Enums.Status.Initialized)
+            {
+                log = new Log<string>();
+                log.PaymentID = paymentId;
+                log.SaveRequest("Payment.AcceptOrderCallback.UpdatePaymentStatus", request.Form);
+
+                try
+                {
+                    PaymentWrapper.UpdatePaymentStatus(payment, request);
+                    log.SaveResponse("Payment status is now: " + payment.Status);
+                }
+                catch (Exception ex)
+                {
+                    log.SaveResponse(string.Format("Exception: {0}, StackTrace: {1}", ex.Message, ex.StackTrace));
+                    Helper.RedirectHtml(context, Helper.EditUrlQueryString(payment.Order.ClientErrorUrl, "msg", ex.Message), "Please wait...");
+                    return;
+                }
+            }
+            #endregion
+
+            #region Client Callback
+            // To test DIBS locally set the DIBS.Settings.CallbackOnAcceptOrder to 1
+            // Otherwise the client will not be notified correctly
+
+            bool IsDIBS = (payment.MerchantAgreement.Provider == GolfBox.Framework.OnlinePayment.Enums.Provider.DIBS || payment.MerchantAgreement.Provider == GolfBox.Framework.OnlinePayment.Enums.Provider.DIBSFlexWin);
+            bool CallbackOnAcceptOrder = !IsDIBS || GolfBox.Framework.ConfigReader.ReadConfig("DIBS.Settings.CallbackOnAcceptOrder", "1") == "1";
+
+            if (CallbackOnAcceptOrder)
+            {
+                log = new Log<string>();
+                log.PaymentID = paymentId;
+                log.SaveRequest("Payment.AcceptOrderCallback.ClientCallback", request.Form);
+
+                try
+                {
+                    Handlers.ProviderCallback.ClientCallback(payment, request, "accept");
+                    log.SaveResponse("Payment status is now: " + payment.Status);
+                }
+                catch (Exception ex)
+                {
+                    log.SaveResponse(string.Format("Exception: {0}, StackTrace: {1}", ex.Message, ex.StackTrace));
+                    Helper.RedirectHtml(context, Helper.EditUrlQueryString(payment.Order.ClientErrorUrl, "msg", ex.Message), "Please wait...");
+                    return;
+                }
+            }
+            #endregion
+ 
+            PaymentWrapper.SetPaymentState(payment, GolfBox.Framework.OnlinePayment.Enums.State.ReturnToClient, "AcceptOrderCallback");
+
+            // Return to Client
+            Helper.RedirectHtml(context, Helper.EditUrlQueryString(payment.Order.ClientReturnUrl, "paymentId", payment.ID.ToString()), "Please wait...");
+        }
+
+        public bool IsReusable
+        {
+            get { return true; }
+        }
+    }
+}

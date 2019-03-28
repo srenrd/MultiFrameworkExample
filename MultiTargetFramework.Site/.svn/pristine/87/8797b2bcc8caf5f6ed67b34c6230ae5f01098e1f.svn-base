@@ -1,0 +1,143 @@
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Web;
+using GolfBox.Framework.OnlinePayment;
+using GolfBox.Framework.OnlinePayment.Enums;
+
+namespace GolfBox.OnlinePayment
+{
+    public class PaymentWrapper
+    {
+        public static void UpdatePaymentStatus(Payment payment, HttpRequest request)
+        {
+            var log = new Log<string> { PaymentID = payment.ID };
+            log.SaveRequest("Payment.PaymentWrapper.UpdatePaymentStatus", "Payment", payment.ToJsonData());
+
+            try
+            {
+                payment.Process(request);
+                log.SaveResponse("Payment status updated to: " + payment.Status);
+            }
+            catch (Exception ex)
+            {
+                log.SaveResponse(string.Format("Error: {0}, StackTrace: {1}, Provider: ({2})", ex.Message, ex.StackTrace, payment.MerchantAgreement.Provider.ToString("F")));
+                payment.Save();
+                throw;
+            }
+
+            payment.Save();
+        }
+
+        public static void CapturePayment(Payment payment)
+        {
+            var log = new Log<string> { PaymentID = payment.ID };
+            log.SaveRequest("Payment.PaymentWrapper.CapturePayment", "Payment", payment.ToJsonData());
+
+            try
+            {
+                payment.Capture();
+                log.SaveResponse("Payment status: " + payment.Status);
+            }
+            catch (Exception ex)
+            {
+                log.SaveResponse(string.Format("Error: {0}, StackTrace: {1}, Provider: ({2})", ex.Message, ex.StackTrace, payment.MerchantAgreement.Provider.ToString("F")));
+                payment.Save();
+                throw;
+            }
+
+            payment.Save();
+        }
+
+        public static void GetClientResponse(Payment payment, string reference)
+        {
+            var log = new Log<string> { PaymentID = payment.ID };
+            var queries = new List<string>
+            {
+                "paymentID", payment.ID.ToString(),
+                "reference", reference
+            };
+
+            var agreementRef = payment.Order["agreementRef"];
+
+            if (!string.IsNullOrWhiteSpace(agreementRef))
+            {
+                queries.AddRange(new[]
+                {
+                    "agreementRef", agreementRef
+                });
+            }
+
+            if (payment.Order.CreditCard != null)
+            {
+                queries.AddRange(new[]
+                {
+                    "ccType",        payment.Order.CreditCard.Type,
+                    "ccNumber",      payment.Order.CreditCard.Number,
+                    "ccExpireYear",  payment.Order.CreditCard.ExpireYear,
+                    "ccExpireMonth", payment.Order.CreditCard.ExpireMonth
+                });
+            }
+
+            var url = Helper.EditUrlQueryString(payment.Order.ClientCallbackUrl, queries.ToArray());
+
+            log.SaveRequest("Payment.PaymentWrapper.GetClientResponse", "PaymentId", payment.ID.ToString(), "ClientCallbackUrl", url);
+
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create(url);
+
+                var response = (HttpWebResponse)request.GetResponse();
+                var stream = new StreamReader(response.GetResponseStream());
+                var result = stream.ReadToEnd();
+
+                stream.Close();
+                response.Close();
+                
+                log.SaveResponse("Client OK, " + result);
+            }
+            catch (WebException ex)
+            {
+                payment.ClientStatus = Status.Error;
+                payment.Save();
+
+                var message = "";
+
+                if (ex.Response != null)
+                {
+                    if (ex.Response.ContentLength != 0)
+                    {
+                        using (var stream = ex.Response.GetResponseStream())
+                        {
+                            using (var reader = new StreamReader(stream))
+                            {
+                                message = reader.ReadToEnd();
+                            }
+                        }
+                    }
+                    log.SaveResponse(message);
+                }
+                else
+                {
+                    log.SaveResponse(string.Format("Exception: {0}, StackTrace: {1}", ex.Message, ex.StackTrace));
+                }
+
+                throw;
+            }
+
+            payment.ClientStatus = payment.Status;
+            payment.Save();
+        }
+
+        public static void SetPaymentState(Payment payment, State state, string initiator)
+        {
+            Log<string> log = new Log<string>();
+            log.PaymentID = payment.ID;
+            log.Action = "Payment.SetState";
+            log.SaveResponse(state.ToString() + (!string.IsNullOrEmpty(initiator) ? " (Initiated from " + initiator + ")" : ""));
+
+            payment.SetState(state);
+        }
+    }
+}

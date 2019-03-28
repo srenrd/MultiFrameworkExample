@@ -1,0 +1,88 @@
+﻿using GolfBox.Framework.OnlinePayment;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+
+namespace Handlers
+{
+    public class MerchantAgreement : IHttpHandler
+    {
+        public void ProcessRequest(HttpContext context)
+        {
+            HttpRequest request = context.Request;
+            HttpResponse response = context.Response;
+            GolfBox.Framework.OnlinePayment.MerchantAgreement merchantAgreement;
+
+            switch (request["method"])
+            {
+                //case "GetAgreementsByCustomer":
+                //    int customerId;
+
+                //    if (!string.IsNullOrWhiteSpace(request["customer_id"]) && int.TryParse(request["customer_id"], out customerId))
+                //    {
+                //        var customermerchantAgreements = GolfBox.Framework.OnlinePayment.CustomerMerchantAgreement.ListByCustomer(customerId);
+                //        string json = GolfBox.OnlinePayment.Helper.ToJson(customermerchantAgreements);
+
+                //        GolfBox.OnlinePayment.Helper.WriteTxt(response, json);
+                //    }
+
+                //    break;
+                case "GetMerchantByID":
+                    int MerchantId;
+
+                    if (!string.IsNullOrWhiteSpace(request["id"]) && int.TryParse(request["id"], out MerchantId))
+                    {
+                        merchantAgreement = GolfBox.Framework.OnlinePayment.MerchantAgreement.Load(MerchantId);
+                        string json = GolfBox.OnlinePayment.Helper.ToJson(merchantAgreement);
+
+                        GolfBox.OnlinePayment.Helper.WriteTxt(response, json);
+                    }
+
+                    break;
+
+                case "SaveMerchant":
+                    int merchantAgreementID;
+
+                    int provider = int.Parse(request["provider"]);
+                    Setting settings = Newtonsoft.Json.JsonConvert.DeserializeObject<Setting>(request["settings"]);                
+
+                    if (request.Form.AllKeys.Contains("id") && !string.IsNullOrWhiteSpace(request["id"]) && int.TryParse(request["id"], out merchantAgreementID))
+                    {
+                        //Update
+                        merchantAgreement = new GolfBox.Framework.OnlinePayment.MerchantAgreement();
+                        merchantAgreement.Provider = (GolfBox.Framework.OnlinePayment.Enums.Provider)provider;
+                        merchantAgreement.Settings = settings;
+                        merchantAgreement.ID = merchantAgreementID;
+                        GolfBox.Framework.OnlinePayment.MerchantAgreement.Save(merchantAgreement);
+
+                    }
+                    else
+                    {
+                        merchantAgreement = GolfBox.Framework.OnlinePayment.MerchantAgreement.Save((GolfBox.Framework.OnlinePayment.Enums.Provider)provider, settings);
+                    }
+
+                    GolfBox.OnlinePayment.Helper.WriteTxt(response, merchantAgreement.ID.ToString());
+
+                    break;
+                //case "GetCustomerMerchantByID":
+                //    int customerAgreementId;
+
+                //    if (!string.IsNullOrWhiteSpace(request["id"]) && int.TryParse(request["id"], out customerAgreementId))
+                //    {
+                //        GolfBox.Framework.OnlinePayment.CustomerMerchantAgreement customerMerchantAgreement = GolfBox.Framework.OnlinePayment.CustomerMerchantAgreement.Load(customerAgreementId);
+                //        string json = GolfBox.OnlinePayment.Helper.ToJson(customerMerchantAgreement);
+
+                //        GolfBox.OnlinePayment.Helper.WriteTxt(response, json);
+                //    }
+
+                //    break;
+            }
+        }
+
+        public bool IsReusable
+        {
+            get { return true; }
+        }
+    }
+}

@@ -1,0 +1,174 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Text;
+using System.Web;
+
+namespace GolfBox.OnlinePayment
+{
+    public static class Helper
+    {
+        public static void WriteTxt(HttpResponse response, string s)
+        {
+            response.Cache.SetCacheability(HttpCacheability.NoCache);
+            response.Cache.SetNoStore();
+            response.Cache.SetExpires(DateTime.MinValue);
+
+            response.ContentType = "text/plain";
+            response.Write(s ?? string.Empty);
+        }
+
+        public static void WriteHtml(HttpResponse response, string s)
+        {
+            string[] contents = {
+                "<!DOCTYPE html>",
+                "<html>",
+                "<head>",
+                "<meta charset=\"utf-8\" />",
+                "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge,chrome=1\" />",
+                "</head>",
+                "<body>",
+                s ?? string.Empty,
+                "</body>",
+                "</html>"
+            };
+
+            response.Cache.SetCacheability(HttpCacheability.NoCache);
+            response.Cache.SetNoStore();
+            response.Cache.SetExpires(DateTime.MinValue);
+
+            response.ContentType = "text/html";
+            response.Write(string.Join(Environment.NewLine, contents));
+        }
+
+        public static void RedirectHtml(HttpContext context, string url, string s)
+        {
+            HttpRequest req = context.Request;
+            HttpResponse res = context.Response;
+
+            string[] contents = {
+                "<!DOCTYPE html>",
+                "<html>",
+                "<head>",
+                "<meta charset=\"utf-8\" />",
+                "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge,chrome=1\" />",
+                "<script>",
+                "setTimeout(function() { location.href = '" + url + "'; }, 1);",
+                "</script>",
+                "<noscript>",
+                "<meta http-equiv=\"refresh\" content=\"1;url=" + url + "\" />",
+                "</noscript>",
+                "</head>",
+                "<body>",
+                s ?? string.Empty,
+                "</body>",
+                "</html>"
+            };
+
+            res.Cache.SetCacheability(HttpCacheability.NoCache);
+            res.Cache.SetNoStore();
+            res.Cache.SetExpires(DateTime.MinValue);
+
+            res.ContentType = "text/html";
+            res.Write(string.Join(Environment.NewLine, contents));
+        }
+
+        public static void RedirectToAwait(HttpContext context, Framework.OnlinePayment.Payment payment)
+        {
+            Framework.OnlinePayment.Log<string> log = new Framework.OnlinePayment.Log<string>();
+            log.PaymentID = payment.ID;
+            log.Action = "OnlinePayment.RedirectToAwait";
+            log.SaveResponse("Current state: " + payment.State);
+
+            Helper.RedirectHtml(context, "/RestrictedArea/Await.aspx?paymentId=" + payment.ID.ToString(), "Please wait...");
+        }
+
+        public static void WriteForm(HttpResponse response, string url, Dictionary<string, string> formData)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            sb.AppendLine("<html>");
+            sb.AppendLine("<head>");
+            sb.AppendLine("<meta charset=\"utf-8\" />");
+            sb.AppendLine("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge,chrome=1\" />");
+            sb.AppendLine("</head>");
+            sb.AppendLine("<body onload=\"document.forms[0].submit()\">");
+
+            sb.AppendFormat("<form action=\"{0}\" method=\"post\">", url);
+            sb.AppendLine();
+
+            foreach (var item in formData)
+            {
+                sb.AppendFormat("<input type=\"hidden\" name=\"{0}\" value=\"{1}\" />", item.Key, item.Value);
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("</form>");
+            sb.AppendLine("</body>");
+            sb.AppendLine("</html>");
+
+            response.Clear();
+            response.Write(sb.ToString());
+            response.OutputStream.Close();
+        }
+
+        public static string EditUrlQueryString(string url, params string[] queries)
+        {
+            Uri u = new Uri(url);
+            NameValueCollection query = HttpUtility.ParseQueryString(u.Query);
+
+            for (int i = 0; i < queries.Length; i += 2)
+            {
+                string k = queries[i];
+                string v = queries[i + 1];
+
+                if (string.IsNullOrWhiteSpace(k))
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(v))
+                    query.Remove(k);
+                else
+                    query.Set(k, v);
+            }
+
+            UriBuilder ub = new UriBuilder();
+
+            ub.Scheme = u.Scheme;
+            ub.Host = u.Host;
+            ub.Port = (u.Port != 80 && u.Port != 443) ? u.Port : ub.Port;
+            ub.Path = u.AbsolutePath;
+            ub.Query = query.ToString();
+
+            return ub.ToString();
+        }
+
+        public static int IntTryParse(string value)
+        {
+            return IntTryParse(value, 0);
+        }
+
+        public static int IntTryParse(string value, int alternative)
+        {
+            int result;
+            if (int.TryParse(value, out result))
+                return result;
+            return alternative;
+        }
+
+        public static string ToJson(object obj)
+        {
+            return ToJson(obj, false);
+        }
+
+        public static string ToJson(object obj, bool indented)
+        {
+            Newtonsoft.Json.JsonSerializerSettings setting = new Newtonsoft.Json.JsonSerializerSettings();
+            Newtonsoft.Json.Converters.IsoDateTimeConverter isoDate = new Newtonsoft.Json.Converters.IsoDateTimeConverter()
+            {
+                DateTimeFormat = "yyyyMMdd\"T\"HHmmss"
+            };
+            setting.Converters.Add(isoDate);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(obj, indented ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None, setting);
+        }
+    }
+}
